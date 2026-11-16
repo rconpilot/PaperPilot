@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import type { ServerStatus, StudioSettings } from '../../preload/index'
 import { ROLE_LABEL, ROLE_TIER, accentTextFor } from './lib'
 import Overview from './pages/Overview'
@@ -11,6 +11,15 @@ import Copilot from './pages/Copilot'
 import SettingsPage from './pages/SettingsPage'
 import logoUrl from './assets/logo.png'
 import { AnimatePresence, motion } from 'motion/react'
+
+// Pages are memoized so the 5-second status poll (which re-renders App)
+// does not re-render pages whose props did not actually change — that
+// cascade was a visible source of jank on page switches and theme changes.
+const MemoTools = memo(Tools)
+const MemoBackups = memo(Backups)
+const MemoLogs = memo(Logs)
+const MemoAudit = memo(Audit)
+const MemoCopilot = memo(Copilot)
 
 export type Page =
   | 'overview'
@@ -40,7 +49,21 @@ function App(): React.JSX.Element {
   const [history, setHistory] = useState<number[]>([])
   const [stars, setStars] = useState<number | null>(null)
   const [userPop, setUserPop] = useState(false)
+  const [maximized, setMaximized] = useState(false)
+  const [navQuery, setNavQuery] = useState('')
   const statusRef = useRef<ServerStatus | null>(null)
+
+  useEffect(() => {
+    const syncMax = (): void => {
+      window.studio
+        .isMaximized()
+        .then(setMaximized)
+        .catch(() => undefined)
+    }
+    syncMax()
+    window.addEventListener('resize', syncMax)
+    return () => window.removeEventListener('resize', syncMax)
+  }, [])
 
   const poll = useCallback(async () => {
     try {
@@ -115,9 +138,17 @@ function App(): React.JSX.Element {
           />
           <div className="app-name">PaperPilot Studio</div>
         </div>
-        <div className="nav-search">Search tools, players…</div>
+        <input
+          className="nav-search"
+          style={{ width: 'calc(100% - 16px)', color: 'var(--text)', outline: 'none' }}
+          placeholder="Search pages…"
+          value={navQuery}
+          onChange={(e) => setNavQuery(e.target.value)}
+        />
         <nav className="nav-items">
-          {navItems.map((n) => (
+          {navItems
+            .filter((n) => n.label.toLowerCase().includes(navQuery.trim().toLowerCase()))
+            .map((n) => (
             <button
               key={n.id}
               className={`nav-item ${shownPage === n.id ? 'active' : ''}`}
@@ -148,7 +179,7 @@ function App(): React.JSX.Element {
             {online && status
               ? `TPS ${status.tps?.[0] ?? '—'} · MSPT ${status.mspt ?? '—'} · ${status.playersOnline ?? 0} players`
               : status?.error
-                ? 'Check Settings → Connection'
+                ? 'Not connected — connect from Overview'
                 : 'Trying to reach the server…'}
           </div>
           <button
@@ -227,41 +258,94 @@ function App(): React.JSX.Element {
             )}
           </button>
           <div className="win-controls">
-            <button className="win-btn" onClick={() => window.studio.minimize()}>
-              —
+            <button
+              className="win-btn"
+              onClick={() => window.studio.minimize()}
+              title="Minimize"
+              aria-label="Minimize"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path d="M0 5 H10" stroke="currentColor" strokeWidth="1" />
+              </svg>
             </button>
-            <button className="win-btn" onClick={() => window.studio.maximize()}>
-              □
+            <button
+              className="win-btn"
+              onClick={() => window.studio.maximize()}
+              title={maximized ? 'Restore' : 'Maximize'}
+              aria-label={maximized ? 'Restore' : 'Maximize'}
+            >
+              {maximized ? (
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                  <path
+                    d="M2.5 2.5 V0.75 H9.25 V7.5 H7.5 M0.75 2.5 H7.5 V9.25 H0.75 Z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1"
+                  />
+                </svg>
+              ) : (
+                <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                  <rect
+                    x="0.75"
+                    y="0.75"
+                    width="8.5"
+                    height="8.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1"
+                  />
+                </svg>
+              )}
             </button>
-            <button className="win-btn close" onClick={() => window.studio.close()}>
-              ✕
+            <button
+              className="win-btn close"
+              onClick={() => window.studio.close()}
+              title="Close"
+              aria-label="Close"
+            >
+              <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+                <path
+                  d="M0.75 0.75 L9.25 9.25 M9.25 0.75 L0.75 9.25"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                />
+              </svg>
             </button>
           </div>
         </div>
         <div className="content">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={shownPage}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.18, ease: 'easeOut' }}
-            >
-              {shownPage === 'overview' && (
-                <Overview status={status} history={history} go={setPage} refresh={poll} />
-              )}
-              {shownPage === 'tools' && settings && <Tools settings={settings} />}
-              {shownPage === 'players' && settings && <Players status={status} settings={settings} />}
-              {shownPage === 'backups' && settings && <Backups settings={settings} />}
-              {shownPage === 'logs' && <Logs />}
-              {shownPage === 'audit' && <Audit />}
-              {shownPage === 'copilot' && settings && <Copilot settings={settings} />}
-              {shownPage === 'settings' && settings && (
-                <SettingsPage settings={settings} onSave={saveSettings} status={status} />
-              )}
-              {!settings && shownPage !== 'overview' && <p className="muted">Loading settings…</p>}
-            </motion.div>
-          </AnimatePresence>
+          {/* Opacity-only, no exit wait: the old mode="wait" crossfade with a
+              vertical slide made every page switch feel like a ~1s freeze in
+              the webview (exit had to finish before the new page painted). */}
+          <motion.div
+            key={shownPage}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
+          >
+            {shownPage === 'overview' && (
+              <Overview
+                status={status}
+                history={history}
+                go={setPage}
+                refresh={poll}
+                settings={settings}
+                onSave={saveSettings}
+              />
+            )}
+            {shownPage === 'tools' && settings && <MemoTools settings={settings} />}
+            {shownPage === 'players' && settings && <Players status={status} settings={settings} />}
+            {shownPage === 'backups' && settings && <MemoBackups settings={settings} />}
+            {shownPage === 'logs' && <MemoLogs />}
+            {shownPage === 'audit' && <MemoAudit />}
+            {shownPage === 'copilot' && settings && (
+              <MemoCopilot settings={settings} onSave={saveSettings} status={status} />
+            )}
+            {shownPage === 'settings' && settings && (
+              <SettingsPage settings={settings} onSave={saveSettings} status={status} />
+            )}
+            {!settings && shownPage !== 'overview' && <p className="muted">Loading settings…</p>}
+          </motion.div>
         </div>
       </div>
     </div>
