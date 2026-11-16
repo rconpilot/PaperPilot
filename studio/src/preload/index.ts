@@ -20,6 +20,22 @@ export interface ServerStatus {
   error?: string
 }
 
+export type ThemeId =
+  | 'fluent-dark'
+  | 'fluent-light'
+  | 'catppuccin'
+  | 'neo-brutalist'
+  | 'neo-sky'
+  | 'claude'
+
+export type TeamRole = 'owner' | 'admin' | 'operator' | 'viewer'
+
+export interface TeamMember {
+  id: string
+  name: string
+  role: TeamRole
+}
+
 export interface StudioSettings {
   rconHost: string
   rconPort: number
@@ -27,9 +43,11 @@ export interface StudioSettings {
   serverDir: string
   allowlist: string[]
   requireApproval: boolean
-  theme: 'fluent-dark' | 'fluent-light' | 'catppuccin'
+  theme: ThemeId
   accent: string
   density: 'comfortable' | 'compact'
+  team: TeamMember[]
+  activeUserId: string
 }
 
 const studio = {
@@ -48,8 +66,18 @@ const studio = {
   audit: (
     limit?: number
   ): Promise<
-    { ts: string; tool: string; args: string; outcome: string; tier: string; detail?: string }[]
+    {
+      ts: string
+      tool: string
+      args: string
+      outcome: string
+      tier: string
+      detail?: string
+      user?: string
+    }[]
   > => ipcRenderer.invoke('pp:audit', limit),
+  github: (): Promise<{ stars: number | null; url: string }> => ipcRenderer.invoke('pp:github'),
+  openExternal: (url: string): void => ipcRenderer.send('shell:open', url),
   getSettings: (): Promise<StudioSettings> => ipcRenderer.invoke('settings:get'),
   setSettings: (next: StudioSettings): Promise<StudioSettings> =>
     ipcRenderer.invoke('settings:set', next),
