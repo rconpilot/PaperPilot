@@ -1,6 +1,6 @@
 {
   "name": "paperpilot-studio",
-  "version": "1.20.0",
+  "version": "1.21.0",
   "description": "PaperPilot Studio \u2014 a native Windows-style GUI for the PaperPilot MCP server (Paper Minecraft server management via RCON). Hosts the real PaperPilot core in-process: 13 guarded tools, audit log, AI Copilot approvals, Fluent themes.",
   "main": "./out/main/index.js",
   "author": "Abol \u2014 dlkhwshabwlfdl-web",
@@ -18,8 +18,7 @@
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux",
-    "sync-core": "node scripts/sync-core.mjs"
+    "build:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
