@@ -65,6 +65,13 @@ app.whenReady().then(() => {
   ipcMain.handle('pp:status', () => service.status())
   ipcMain.handle('pp:backups', () => service.listBackups())
   ipcMain.handle('pp:audit', (_e, limit?: number) => service.readAudit(limit ?? 200))
+  ipcMain.handle('pp:github', () => service.githubInfo())
+  ipcMain.on('shell:open', (_e, url: string) => {
+    // Only the project's own GitHub pages may be opened from the UI.
+    if (typeof url === 'string' && url.startsWith('https://github.com/rconpilot/')) {
+      shell.openExternal(url)
+    }
+  })
 
   // --- settings ---
   ipcMain.handle('settings:get', () => settings)

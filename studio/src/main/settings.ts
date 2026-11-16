@@ -2,6 +2,24 @@ import { app } from 'electron'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+export type ThemeId =
+  | 'fluent-dark'
+  | 'fluent-light'
+  | 'catppuccin'
+  | 'neo-brutalist'
+  | 'neo-sky'
+  | 'claude'
+
+/** A local Studio user. Roles map onto the PaperPilot core's tiers:
+ *  owner/admin → admin, operator → operator, viewer → readonly. */
+export type TeamRole = 'owner' | 'admin' | 'operator' | 'viewer'
+
+export interface TeamMember {
+  id: string
+  name: string
+  role: TeamRole
+}
+
 /** Studio's own settings — stored locally in userData, never in the repo. */
 export interface StudioSettings {
   rconHost: string
@@ -16,9 +34,13 @@ export interface StudioSettings {
   allowlist: string[]
   /** Require an explicit confirmation before admin-tier tools run from the UI. */
   requireApproval: boolean
-  theme: 'fluent-dark' | 'fluent-light' | 'catppuccin'
+  theme: ThemeId
   accent: string
   density: 'comfortable' | 'compact'
+  /** Local team: the owner plus any admins the owner added with limited roles. */
+  team: TeamMember[]
+  /** Id of the team member currently using Studio (drives tool permissions). */
+  activeUserId: string
 }
 
 export const DEFAULT_SETTINGS: StudioSettings = {
@@ -28,9 +50,11 @@ export const DEFAULT_SETTINGS: StudioSettings = {
   serverDir: '',
   allowlist: ['say', 'list', 'tps', 'save-all', 'whitelist', 'weather', 'time set day'],
   requireApproval: true,
-  theme: 'fluent-dark',
-  accent: '#4CC2FF',
-  density: 'comfortable'
+  theme: 'claude',
+  accent: '#D97757',
+  density: 'comfortable',
+  team: [{ id: 'owner', name: 'Owner', role: 'owner' }],
+  activeUserId: 'owner'
 }
 
 function settingsPath(): string {

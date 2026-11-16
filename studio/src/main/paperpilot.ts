@@ -1,11 +1,31 @@
-import { app } from 'electron'
+import { app, net } from 'electron'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { AuditLogger, type AuditEntry } from '../core/audit'
-import type { PaperPilotConfig } from '../core/config'
+import { AuditLogger, summarizeArgs, type AuditEntry } from '../core/audit'
+import { tierAtLeast, type PaperPilotConfig, type Tier } from '../core/config'
 import { RconClient } from '../core/rcon'
 import { createTools, type ToolDefinition } from '../core/tools'
-import type { StudioSettings } from './settings'
+import type { StudioSettings, TeamMember, TeamRole } from './settings'
+
+/** Audit logger that stamps every entry with the active Studio user, so the
+ *  log shows WHO ran (or was denied) each tool — the core's own entries flow
+ *  through here too because createTools receives this logger. */
+class UserAuditLogger extends AuditLogger {
+  constructor(
+    path: string,
+    private readonly getUser: () => string
+  ) {
+    super(path)
+  }
+
+  override log(entry: AuditEntry): void {
+    super.log({ ...entry, user: this.getUser() } as AuditEntry)
+  }
+}
+
+export function roleTier(role: TeamRole): Tier {
+  return role === 'operator' ? 'operator' : role === 'viewer' ? 'readonly' : 'admin'
+}
 
 export interface ToolInfo {
   name: string
@@ -43,6 +63,8 @@ export class PaperPilotService {
   private settings: StudioSettings
   private auditPath: string
   private backupDir: string
+  private auditLogger: UserAuditLogger | null = null
+  private ghCache: { stars: number | null; at: number } = { stars: null, at: 0 }
 
   constructor(settings: StudioSettings) {
     this.settings = settings
@@ -80,9 +102,19 @@ export class PaperPilotService {
       port: config.rconPort,
       password: config.rconPassword
     })
-    const audit = new AuditLogger(config.auditLogPath)
+    const audit = new UserAuditLogger(config.auditLogPath, () => this.activeUser().name)
+    this.auditLogger = audit
     const tools = createTools({ config, rcon, audit })
     this.tools = new Map(tools.map((t) => [t.name, t]))
+  }
+
+  /** The team member currently using Studio (falls back to the owner). */
+  activeUser(): TeamMember {
+    const team = this.settings.team ?? []
+    return (
+      team.find((m) => m.id === this.settings.activeUserId) ??
+      team[0] ?? { id: 'owner', name: 'Owner', role: 'owner' as TeamRole }
+    )
   }
 
   listTools(): ToolInfo[] {
@@ -117,12 +149,49 @@ export class PaperPilotService {
   ): Promise<{ ok: boolean; text?: string; error?: string }> {
     const tool = this.tools.get(name)
     if (!tool) return { ok: false, error: `Unknown tool "${name}".` }
+    // Team gate: the core instance runs at admin tier, so Studio enforces the
+    // ACTIVE USER's tier here — a viewer can never run an operator/admin tool,
+    // and the denial lands in the audit log under their name.
+    const user = this.activeUser()
+    const tier = roleTier(user.role)
+    if (!tierAtLeast(tier, tool.tier)) {
+      const error = `"${name}" needs the ${tool.tier} tier — ${user.name} is a ${user.role} (${tier}).`
+      this.auditLogger?.log({
+        ts: new Date().toISOString(),
+        tool: name,
+        args: summarizeArgs(args ?? {}),
+        outcome: 'denied',
+        tier,
+        detail: error
+      })
+      return { ok: false, error }
+    }
     try {
       const text = await tool.handler(args ?? {})
       return { ok: true, text }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
+  }
+
+  /** GitHub repo info for the header bar — star count, cached for 10 min. */
+  async githubInfo(): Promise<{ stars: number | null; url: string }> {
+    const url = 'https://github.com/rconpilot/PaperPilot'
+    if (this.ghCache.stars !== null && Date.now() - this.ghCache.at < 10 * 60 * 1000) {
+      return { stars: this.ghCache.stars, url }
+    }
+    try {
+      const res = await net.fetch('https://api.github.com/repos/rconpilot/PaperPilot', {
+        headers: { 'User-Agent': 'PaperPilot-Studio' }
+      })
+      if (res.ok) {
+        const j = (await res.json()) as { stargazers_count?: number }
+        this.ghCache = { stars: j.stargazers_count ?? null, at: Date.now() }
+      }
+    } catch {
+      /* offline — keep the last known count */
+    }
+    return { stars: this.ghCache.stars, url }
   }
 
   /** server_status, parsed into fields for the dashboard. */
