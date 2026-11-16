@@ -475,7 +475,7 @@ export default function SettingsPage({
               </div>
               {(
                 [
-                  ['Version', '1.21.0'],
+                  ['Version', '1.21.1'],
                   ['Tools', '13 · 3 permission tiers'],
                   ['Audit log', 'Always on'],
                   ['Design', 'Fluent v2 + Neo-Brutalism + Claude themes']
