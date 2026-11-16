@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ServerStatus, StudioSettings } from '../../preload/index'
-import { accentTextFor } from './lib'
+import { ROLE_LABEL, ROLE_TIER, accentTextFor } from './lib'
 import Overview from './pages/Overview'
 import Tools from './pages/Tools'
 import Players from './pages/Players'
@@ -36,6 +36,8 @@ function App(): React.JSX.Element {
   const [settings, setSettings] = useState<StudioSettings | null>(null)
   const [status, setStatus] = useState<ServerStatus | null>(null)
   const [history, setHistory] = useState<number[]>([])
+  const [stars, setStars] = useState<number | null>(null)
+  const [userPop, setUserPop] = useState(false)
   const statusRef = useRef<ServerStatus | null>(null)
 
   const poll = useCallback(async () => {
@@ -55,7 +57,18 @@ function App(): React.JSX.Element {
     window.studio.getSettings().then(setSettings).catch(() => undefined)
     poll()
     const id = setInterval(poll, 5000)
-    return () => clearInterval(id)
+    const fetchStars = (): void => {
+      window.studio
+        .github()
+        .then((g) => setStars(g.stars))
+        .catch(() => undefined)
+    }
+    fetchStars()
+    const gid = setInterval(fetchStars, 10 * 60 * 1000)
+    return () => {
+      clearInterval(id)
+      clearInterval(gid)
+    }
   }, [poll])
 
   useEffect(() => {
@@ -75,6 +88,16 @@ function App(): React.JSX.Element {
   }, [poll])
 
   const online = status?.online ?? false
+  const me = settings?.team.find((m) => m.id === settings.activeUserId) ?? settings?.team[0]
+  const canManage = !me || me.role === 'owner' || me.role === 'admin'
+  const navItems = NAV.filter((n) => n.id !== 'settings' || canManage)
+  const shownPage: Page = page === 'settings' && !canManage ? 'overview' : page
+
+  const switchUser = (id: string): void => {
+    if (!settings) return
+    setUserPop(false)
+    saveSettings({ ...settings, activeUserId: id }).catch(() => undefined)
+  }
 
   return (
     <div className="app">
@@ -85,10 +108,10 @@ function App(): React.JSX.Element {
         </div>
         <div className="nav-search">Search tools, players…</div>
         <nav className="nav-items">
-          {NAV.map((n) => (
+          {navItems.map((n) => (
             <button
               key={n.id}
-              className={`nav-item ${page === n.id ? 'active' : ''}`}
+              className={`nav-item ${shownPage === n.id ? 'active' : ''}`}
               onClick={() => setPage(n.id)}
             >
               <span style={{ width: 18, textAlign: 'center' }}>{n.icon}</span>
@@ -112,21 +135,73 @@ function App(): React.JSX.Element {
                 ? 'Check Settings → Connection'
                 : 'Trying to reach the server…'}
           </div>
-          <div className="profile-row">
+          <button
+            className="profile-row"
+            style={{ width: '100%', textAlign: 'left', cursor: 'pointer', background: 'none' }}
+            onClick={() => setUserPop((v) => !v)}
+            title="Switch user"
+          >
             <span className="avatar" style={{ width: 30, height: 30, fontSize: 13 }}>
-              A
+              {(me?.name ?? 'O').slice(0, 1).toUpperCase()}
             </span>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>Owner</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>{me?.name ?? 'Owner'}</div>
               <div className="muted" style={{ fontSize: 11 }}>
-                PaperPilot core · admin tier
+                {ROLE_LABEL[me?.role ?? 'owner']} · {ROLE_TIER[me?.role ?? 'owner']} tier
               </div>
             </div>
-          </div>
+            <span className="muted" style={{ fontSize: 11 }}>
+              ⇅
+            </span>
+          </button>
+          {userPop && settings && (
+            <div className="user-pop">
+              <div className="small muted" style={{ padding: '4px 10px 8px', fontWeight: 600 }}>
+                Switch user — permissions apply instantly
+              </div>
+              {settings.team.map((m) => (
+                <button
+                  key={m.id}
+                  className={`nav-item ${m.id === me?.id ? 'active' : ''}`}
+                  onClick={() => switchUser(m.id)}
+                >
+                  <span className="avatar" style={{ width: 24, height: 24, fontSize: 11 }}>
+                    {m.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span style={{ flex: 1 }}>{m.name}</span>
+                  <span className="role-badge">{ROLE_LABEL[m.role]}</span>
+                </button>
+              ))}
+              {canManage && (
+                <button
+                  className="nav-item"
+                  onClick={() => {
+                    setUserPop(false)
+                    setPage('settings')
+                  }}
+                >
+                  <span style={{ width: 24, textAlign: 'center' }}>＋</span>
+                  <span style={{ flex: 1 }}>Manage team…</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </aside>
       <div className="main">
         <div className="titlebar">
+          <button
+            className="gh-chip"
+            onClick={() => window.studio.openExternal('https://github.com/rconpilot/PaperPilot')}
+            title="Open the PaperPilot project on GitHub"
+          >
+            <span>⌂ GitHub · rconpilot/PaperPilot</span>
+            {stars !== null && (
+              <span>
+                <span className="star">★</span> {stars}
+              </span>
+            )}
+          </button>
           <div className="win-controls">
             <button className="win-btn" onClick={() => window.studio.minimize()}>
               —
@@ -140,19 +215,19 @@ function App(): React.JSX.Element {
           </div>
         </div>
         <div className="content">
-          {page === 'overview' && (
+          {shownPage === 'overview' && (
             <Overview status={status} history={history} go={setPage} refresh={poll} />
           )}
-          {page === 'tools' && settings && <Tools settings={settings} />}
-          {page === 'players' && settings && <Players status={status} settings={settings} />}
-          {page === 'backups' && settings && <Backups settings={settings} />}
-          {page === 'logs' && <Logs />}
-          {page === 'audit' && <Audit />}
-          {page === 'copilot' && settings && <Copilot settings={settings} />}
-          {page === 'settings' && settings && (
+          {shownPage === 'tools' && settings && <Tools settings={settings} />}
+          {shownPage === 'players' && settings && <Players status={status} settings={settings} />}
+          {shownPage === 'backups' && settings && <Backups settings={settings} />}
+          {shownPage === 'logs' && <Logs />}
+          {shownPage === 'audit' && <Audit />}
+          {shownPage === 'copilot' && settings && <Copilot settings={settings} />}
+          {shownPage === 'settings' && settings && (
             <SettingsPage settings={settings} onSave={saveSettings} status={status} />
           )}
-          {!settings && page !== 'overview' && <p className="muted">Loading settings…</p>}
+          {!settings && shownPage !== 'overview' && <p className="muted">Loading settings…</p>}
         </div>
       </div>
     </div>

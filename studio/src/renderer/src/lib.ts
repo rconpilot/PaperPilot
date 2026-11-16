@@ -48,3 +48,24 @@ export const ACCENTS: { hex: string; name: string }[] = [
   { hex: '#FAB387', name: 'Peach' },
   { hex: '#89DCEB', name: 'Sky' }
 ]
+
+/** Team roles → PaperPilot core tiers (mirrors the main-process gate). */
+export const ROLE_TIER: Record<string, string> = {
+  owner: 'admin',
+  admin: 'admin',
+  operator: 'operator',
+  viewer: 'readonly'
+}
+
+export const ROLE_LABEL: Record<string, string> = {
+  owner: 'Owner',
+  admin: 'Admin',
+  operator: 'Operator',
+  viewer: 'Viewer'
+}
+
+const TIER_RANK: Record<string, number> = { readonly: 0, operator: 1, admin: 2 }
+
+export function tierAllows(userTier: string, toolTier: string): boolean {
+  return (TIER_RANK[userTier] ?? 0) >= (TIER_RANK[toolTier] ?? 0)
+}
