@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { StudioSettings, ToolInfo } from '../../../preload/index'
+import { ROLE_LABEL, ROLE_TIER, tierAllows } from '../lib'
 import { Modal, ResultBox } from '../components/ui'
 
 const TIER_ORDER = ['readonly', 'operator', 'admin'] as const
@@ -20,6 +21,9 @@ export default function Tools({ settings }: { settings: StudioSettings }): React
   const [values, setValues] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ text?: string; error?: string } | null>(null)
+
+  const me = settings.team.find((m) => m.id === settings.activeUserId) ?? settings.team[0]
+  const myTier = ROLE_TIER[me?.role ?? 'owner'] ?? 'admin'
 
   useEffect(() => {
     window.studio.listTools().then(setTools).catch(() => undefined)
@@ -51,6 +55,13 @@ export default function Tools({ settings }: { settings: StudioSettings }): React
       <p className="page-sub">
         All {tools.length} PaperPilot tools — the same guarded path the AI uses. Admin tools
         {settings.requireApproval ? ' ask for confirmation first.' : ' run immediately (approval is off in Settings).'}
+        {me && me.role !== 'owner' && (
+          <>
+            {' '}
+            You are signed in as <strong>{me.name}</strong> ({ROLE_LABEL[me.role]} · {myTier} tier)
+            — tools above your tier are locked.
+          </>
+        )}
       </p>
       {TIER_ORDER.map((tier) => {
         const group = tools.filter((t) => t.tier === tier)
@@ -62,8 +73,10 @@ export default function Tools({ settings }: { settings: StudioSettings }): React
               <span className="muted small">{group.length} tools</span>
             </div>
             <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-              {group.map((t) => (
-                <div key={t.name} className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+              {group.map((t) => {
+                const locked = !tierAllows(myTier, t.tier)
+                return (
+                <div key={t.name} className="card" style={{ display: 'flex', flexDirection: 'column', opacity: locked ? 0.62 : 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{t.name}</div>
                   <p className="muted small" style={{ lineHeight: 1.55, flex: 1 }}>
                     {t.description}
@@ -72,11 +85,14 @@ export default function Tools({ settings }: { settings: StudioSettings }): React
                     className="btn subtle small"
                     style={{ marginTop: 14, alignSelf: 'flex-start' }}
                     onClick={() => open(t)}
+                    disabled={locked}
+                    title={locked ? `Needs the ${t.tier} tier` : undefined}
                   >
-                    Run…
+                    {locked ? `🔒 Needs ${t.tier}` : 'Run…'}
                   </button>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )

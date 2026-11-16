@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import type { ServerStatus, StudioSettings } from '../../../preload/index'
-import { ACCENTS } from '../lib'
+import type { ServerStatus, StudioSettings, TeamMember, TeamRole } from '../../../preload/index'
+import { ACCENTS, ROLE_LABEL, ROLE_TIER } from '../lib'
 import { ResultBox, Toggle } from '../components/ui'
 
-type Section = 'connection' | 'appearance' | 'safety' | 'about'
+type Section = 'connection' | 'appearance' | 'team' | 'safety' | 'about'
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'connection', label: 'Connection' },
   { id: 'appearance', label: 'Appearance' },
+  { id: 'team', label: 'Team & access' },
   { id: 'safety', label: 'Safety & approvals' },
   { id: 'about', label: 'About' }
 ]
@@ -20,6 +21,9 @@ const THEMES: {
   accent: string
   text: string
 }[] = [
+  { id: 'claude', name: 'Claude', bg: '#F5F4ED', nav: '#F0EEE6', cardBg: '#FFFFFF', accent: '#D97757', text: '#1F1E1D' },
+  { id: 'neo-brutalist', name: 'Neo-Brutalism', bg: '#FDFDFA', nav: '#FFF3BF', cardBg: '#FFFFFF', accent: '#FFD21F', text: '#141414' },
+  { id: 'neo-sky', name: 'Neo-Brutalism · Sky', bg: '#F2F9FF', nav: '#E0F2FE', cardBg: '#FFFFFF', accent: '#38BDF8', text: '#0B2B3C' },
   { id: 'fluent-dark', name: 'Fluent Dark', bg: '#202020', nav: 'rgba(255,255,255,0.06)', cardBg: 'rgba(255,255,255,0.1)', accent: '#4CC2FF', text: '#ffffff' },
   { id: 'fluent-light', name: 'Fluent Light', bg: '#f3f3f3', nav: 'rgba(255,255,255,0.9)', cardBg: '#ffffff', accent: '#0067c0', text: '#1c1c1c' },
   { id: 'catppuccin', name: 'Catppuccin Mocha', bg: '#1e1e2e', nav: '#181825', cardBg: '#313244', accent: '#cba6f7', text: '#cdd6f4' }
@@ -39,6 +43,32 @@ export default function SettingsPage({
   const [savedNote, setSavedNote] = useState('')
   const [testResult, setTestResult] = useState<{ text?: string; error?: string } | null>(null)
   const [newAllow, setNewAllow] = useState('')
+  const [newMemberName, setNewMemberName] = useState('')
+  const [newMemberRole, setNewMemberRole] = useState<TeamRole>('operator')
+
+  const me = settings.team.find((m) => m.id === settings.activeUserId) ?? settings.team[0]
+  const canManageTeam = me?.role === 'owner' || me?.role === 'admin'
+
+  const setTeam = (team: TeamMember[], activeUserId?: string): void => {
+    applyNow({ team, ...(activeUserId ? { activeUserId } : {}) })
+  }
+
+  const addMember = (): void => {
+    const name = newMemberName.trim()
+    if (!name) return
+    const member: TeamMember = {
+      id: `u${Date.now().toString(36)}`,
+      name,
+      role: newMemberRole
+    }
+    setTeam([...settings.team, member])
+    setNewMemberName('')
+  }
+
+  const removeMember = (id: string): void => {
+    const team = settings.team.filter((m) => m.id !== id)
+    setTeam(team, settings.activeUserId === id ? 'owner' : undefined)
+  }
 
   const applyNow = (patch: Partial<StudioSettings>): void => {
     const next = { ...settings, ...patch }
@@ -177,7 +207,7 @@ export default function SettingsPage({
                       key={t.id}
                       className={`card theme-card ${settings.theme === t.id ? 'selected' : ''}`}
                       style={{ cursor: 'pointer', padding: 12 }}
-                      onClick={() => applyNow({ theme: t.id })}
+                      onClick={() => applyNow({ theme: t.id, accent: t.accent })}
                     >
                       <div style={{ background: t.bg, borderRadius: 6, height: 92, display: 'flex', overflow: 'hidden' }}>
                         <div style={{ width: 52, background: t.nav, padding: 8 }}>
@@ -261,6 +291,119 @@ export default function SettingsPage({
             </div>
           )}
 
+          {section === 'team' && (
+            <div className="card">
+              <h3>Team & access</h3>
+              <p className="muted small" style={{ marginBottom: 16, lineHeight: 1.6 }}>
+                The people who use Studio on this device. Each person signs in as themselves
+                (bottom-left corner), and their role caps which PaperPilot tools they can run —
+                enforced in the core bridge, and every run lands in the Audit Log under their
+                name. Roles map to the core tiers: Admin → admin, Operator → operator, Viewer →
+                read-only.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {settings.team.map((m) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: '10px 0',
+                      borderTop: '1px solid var(--stroke)'
+                    }}
+                  >
+                    <span className="avatar" style={{ width: 32, height: 32, fontSize: 13 }}>
+                      {m.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600 }}>
+                        {m.name}
+                        {m.id === me?.id && <span className="muted small"> · you</span>}
+                      </div>
+                      <div className="muted small">
+                        {ROLE_LABEL[m.role]} · {ROLE_TIER[m.role]} tier
+                      </div>
+                    </div>
+                    {m.role === 'owner' ? (
+                      <span className="chip">Full access</span>
+                    ) : canManageTeam ? (
+                      <>
+                        <select
+                          className="input"
+                          style={{ width: 140, height: 32 }}
+                          value={m.role}
+                          onChange={(e) =>
+                            setTeam(
+                              settings.team.map((x) =>
+                                x.id === m.id ? { ...x, role: e.target.value as TeamRole } : x
+                              )
+                            )
+                          }
+                        >
+                          <option value="admin">Admin</option>
+                          <option value="operator">Operator</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                        <button className="btn subtle small" onClick={() => removeMember(m.id)}>
+                          Remove
+                        </button>
+                      </>
+                    ) : (
+                      <span className="chip">{ROLE_LABEL[m.role]}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {canManageTeam ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 8,
+                    marginTop: 18,
+                    borderTop: '1px solid var(--stroke)',
+                    paddingTop: 16,
+                    alignItems: 'center'
+                  }}
+                >
+                  <input
+                    className="input"
+                    style={{ flex: 1 }}
+                    placeholder="New member's name — e.g. their Minecraft username"
+                    value={newMemberName}
+                    onChange={(e) => setNewMemberName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') addMember()
+                    }}
+                  />
+                  <select
+                    className="input"
+                    style={{ width: 150 }}
+                    value={newMemberRole}
+                    onChange={(e) => setNewMemberRole(e.target.value as TeamRole)}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="operator">Operator</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                  <button className="btn accent" onClick={addMember} disabled={!newMemberName.trim()}>
+                    Add member
+                  </button>
+                </div>
+              ) : (
+                <p className="muted small" style={{ marginTop: 14 }}>
+                  Only the owner or an admin can change the team. Ask them to add you or raise
+                  your role.
+                </p>
+              )}
+              <p className="muted small" style={{ marginTop: 14, lineHeight: 1.6 }}>
+                Viewer can look at everything but only runs read-only tools. Operator adds
+                day-to-day actions (kick, say, weather…). Admin runs everything except changing
+                the team and the safety settings — those stay with the owner.
+              </p>
+            </div>
+          )}
+
           {section === 'safety' && (
             <div className="card">
               <h3>Safety & approvals</h3>
@@ -332,10 +475,10 @@ export default function SettingsPage({
               </div>
               {(
                 [
-                  ['Version', '1.20.0'],
+                  ['Version', '1.21.0'],
                   ['Tools', '13 · 3 permission tiers'],
                   ['Audit log', 'Always on'],
-                  ['Design', 'Fluent v2 — Figma']
+                  ['Design', 'Fluent v2 + Neo-Brutalism + Claude themes']
                 ] as const
               ).map(([k, v]) => (
                 <div
@@ -351,9 +494,63 @@ export default function SettingsPage({
                   <strong>{v}</strong>
                 </div>
               ))}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  padding: '9px 0',
+                  borderTop: '1px solid var(--stroke)'
+                }}
+              >
+                <span className="muted">GitHub</span>
+                <button
+                  style={{ fontWeight: 600, color: 'var(--accent)', cursor: 'pointer' }}
+                  onClick={() =>
+                    window.studio.openExternal('https://github.com/rconpilot/PaperPilot')
+                  }
+                >
+                  github.com/rconpilot/PaperPilot ↗
+                </button>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  padding: '9px 0',
+                  borderTop: '1px solid var(--stroke)'
+                }}
+              >
+                <span className="muted">License</span>
+                <strong>MIT License</strong>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  padding: '9px 0',
+                  borderTop: '1px solid var(--stroke)'
+                }}
+              >
+                <span className="muted">Copyright</span>
+                <strong>© 2026 Abol (rconpilot)</strong>
+              </div>
               <p className="muted small" style={{ marginTop: 14, lineHeight: 1.6 }}>
                 Studio hosts the PaperPilot core in-process: the same code, the same guards, the
                 same audit log as the MCP server on GitHub.
+              </p>
+              <p
+                className="muted small"
+                style={{
+                  marginTop: 18,
+                  borderTop: '1px solid var(--stroke)',
+                  paddingTop: 12,
+                  textAlign: 'center',
+                  lineHeight: 1.7
+                }}
+              >
+                © 2026 Abol (rconpilot). All rights reserved. PaperPilot Studio is free and
+                open-source software, released under the MIT License — see the LICENSE file in
+                the GitHub repository.
               </p>
             </div>
           )}

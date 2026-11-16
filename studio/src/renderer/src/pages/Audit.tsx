@@ -8,6 +8,7 @@ interface AuditRow {
   outcome: string
   tier: string
   detail?: string
+  user?: string
 }
 
 type Filter = 'all' | 'allowed' | 'denied'
@@ -83,6 +84,7 @@ export default function Audit(): React.JSX.Element {
               <tr>
                 <th>TIME</th>
                 <th>TOOL</th>
+                <th>USER</th>
                 <th>ARGS</th>
                 <th>RESULT</th>
                 <th>DETAIL</th>
@@ -96,6 +98,9 @@ export default function Audit(): React.JSX.Element {
                   </td>
                   <td>
                     <strong>{r.tool}</strong>
+                  </td>
+                  <td className="muted" style={{ whiteSpace: 'nowrap' }}>
+                    {r.user ?? '—'}
                   </td>
                   <td className="muted" style={{ maxWidth: 300, wordBreak: 'break-all' }}>
                     {r.args}
