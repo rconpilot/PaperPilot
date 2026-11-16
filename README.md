@@ -18,7 +18,7 @@ Player names are also validated before any moderation command is built, so a nam
 ## Quick start
 
 ```bash
-git clone https://github.com/dlkhwshabwlfdl-web/PaperPilot.git
+git clone https://github.com/rconpilot/PaperPilot.git
 cd PaperPilot
 npm install
 cp .env.example .env                              # set RCON_PASSWORD (and host/port if needed)
