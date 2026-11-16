@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ServerStatus } from '../../../preload/index'
+import type { ServerStatus, StudioSettings } from '../../../preload/index'
 import type { Page } from '../App'
 import { fmtDateTime } from '../lib'
 import { ResultBox } from '../components/ui'
@@ -16,17 +16,42 @@ export default function Overview({
   status,
   history,
   go,
-  refresh
+  refresh,
+  settings,
+  onSave
 }: {
   status: ServerStatus | null
   history: number[]
   go: (p: Page) => void
   refresh: () => void
+  settings: StudioSettings | null
+  onSave: (next: StudioSettings) => Promise<void>
 }): React.JSX.Element {
   const [plugins, setPlugins] = useState<number | null>(null)
   const [activity, setActivity] = useState<AuditRow[]>([])
   const [diag, setDiag] = useState<{ text?: string; error?: string } | null>(null)
   const [diagBusy, setDiagBusy] = useState(false)
+  const [draft, setDraft] = useState({ rconHost: '', rconPort: 25575, rconPassword: '', serverDir: '' })
+  const [connecting, setConnecting] = useState(false)
+
+  useEffect(() => {
+    if (settings) {
+      setDraft({
+        rconHost: settings.rconHost,
+        rconPort: settings.rconPort,
+        rconPassword: settings.rconPassword,
+        serverDir: settings.serverDir
+      })
+    }
+  }, [settings?.rconHost, settings?.rconPort, settings?.rconPassword, settings?.serverDir])
+
+  const connect = async (): Promise<void> => {
+    if (!settings) return
+    setConnecting(true)
+    await onSave({ ...settings, ...draft })
+    refresh()
+    setConnecting(false)
+  }
 
   useEffect(() => {
     window.studio
@@ -61,21 +86,86 @@ export default function Overview({
       <div>
         <div className="page-title">Overview</div>
         <p className="page-sub">Your Paper server at a glance — live data via PaperPilot</p>
-        <div className="card" style={{ maxWidth: 640 }}>
-          <h3>Can’t reach the server</h3>
-          <p className="muted" style={{ lineHeight: 1.6, marginBottom: 8 }}>
-            Studio talks to your Paper server through the PaperPilot core (RCON). The last
-            attempt failed:
+        <div className="card" style={{ maxWidth: 680 }}>
+          <h3>Connect to your server</h3>
+          <p className="muted" style={{ lineHeight: 1.6, marginBottom: 6 }}>
+            Studio isn’t connected yet. Point it at your Paper server — local or on a VPS —
+            with the RCON details from its <code>server.properties</code> (
+            <code>enable-rcon=true</code>, <code>rcon.port</code>,{' '}
+            <code>rcon.password</code>). Your details are saved on this device, so from now on
+            Studio connects on its own every time it opens.
           </p>
-          <p className="error-text" style={{ marginBottom: 16 }}>
-            {status.error ?? 'Connection failed'}
-          </p>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn accent" onClick={refresh}>
+          {status.error && (
+            <p className="small" style={{ marginBottom: 16, color: 'var(--yellow)' }}>
+              Last attempt: {status.error}
+            </p>
+          )}
+          <div className="grid" style={{ gridTemplateColumns: '1fr 130px 1fr' }}>
+            <label>
+              <span className="small muted">Server address (host or IP)</span>
+              <input
+                className="input"
+                style={{ marginTop: 6 }}
+                placeholder="127.0.0.1 or play.example.com"
+                value={draft.rconHost}
+                onChange={(e) => setDraft({ ...draft, rconHost: e.target.value })}
+              />
+            </label>
+            <label>
+              <span className="small muted">RCON port</span>
+              <input
+                className="input"
+                style={{ marginTop: 6 }}
+                type="number"
+                value={draft.rconPort}
+                onChange={(e) => setDraft({ ...draft, rconPort: Number(e.target.value) })}
+              />
+            </label>
+            <label>
+              <span className="small muted">RCON password</span>
+              <input
+                className="input"
+                style={{ marginTop: 6 }}
+                type="password"
+                value={draft.rconPassword}
+                onChange={(e) => setDraft({ ...draft, rconPassword: e.target.value })}
+              />
+            </label>
+          </div>
+          <label style={{ display: 'block', marginTop: 14 }}>
+            <span className="small muted">
+              Server folder on THIS PC (optional — only for logs and backups; leave empty for a
+              remote server)
+            </span>
+            <span style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+              <input
+                className="input"
+                style={{ flex: 1 }}
+                placeholder="C:\\path\\to\\your\\paper-server"
+                value={draft.serverDir}
+                onChange={(e) => setDraft({ ...draft, serverDir: e.target.value })}
+              />
+              <button
+                className="btn subtle"
+                type="button"
+                onClick={async () => {
+                  const picked = await window.studio.pickFolder()
+                  if (picked) setDraft({ ...draft, serverDir: picked })
+                }}
+              >
+                Browse…
+              </button>
+            </span>
+          </label>
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            <button className="btn accent" onClick={connect} disabled={connecting || !settings}>
+              {connecting ? 'Connecting…' : 'Connect'}
+            </button>
+            <button className="btn subtle" onClick={refresh}>
               Retry
             </button>
             <button className="btn subtle" onClick={() => go('settings')}>
-              Open Settings → Connection
+              All settings
             </button>
           </div>
         </div>

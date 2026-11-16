@@ -1,15 +1,22 @@
 import { useState } from 'react'
 import type { ServerStatus, StudioSettings, TeamMember, TeamRole } from '../../../preload/index'
 import { ACCENTS, ROLE_LABEL, ROLE_TIER } from '../lib'
-import { ResultBox, Toggle } from '../components/ui'
+import { ResultBox, Select, Toggle } from '../components/ui'
 
-type Section = 'connection' | 'appearance' | 'team' | 'safety' | 'about'
+type Section = 'connection' | 'appearance' | 'team' | 'safety' | 'ai' | 'about'
 const SECTIONS: { id: Section; label: string }[] = [
   { id: 'connection', label: 'Connection' },
   { id: 'appearance', label: 'Appearance' },
   { id: 'team', label: 'Team & access' },
   { id: 'safety', label: 'Safety & approvals' },
+  { id: 'ai', label: 'AI Copilot' },
   { id: 'about', label: 'About' }
+]
+
+const ROLE_OPTIONS = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'operator', label: 'Operator' },
+  { value: 'viewer', label: 'Viewer' }
 ]
 
 const THEMES: {
@@ -147,14 +154,29 @@ export default function SettingsPage({
                 </label>
               </div>
               <label style={{ display: 'block', marginTop: 14 }}>
-                <span className="small muted">Server folder (for logs/latest.log and backups/)</span>
-                <input
-                  className="input"
-                  style={{ marginTop: 6 }}
-                  placeholder="C:\\path\\to\\your\\paper-server"
-                  value={draft.serverDir}
-                  onChange={(e) => setDraft({ ...draft, serverDir: e.target.value })}
-                />
+                <span className="small muted">
+                  Server folder on THIS PC (optional — only used for logs and backups; leave
+                  empty when the server runs elsewhere, e.g. on a VPS)
+                </span>
+                <span style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                  <input
+                    className="input"
+                    style={{ flex: 1 }}
+                    placeholder="C:\\path\\to\\your\\paper-server"
+                    value={draft.serverDir}
+                    onChange={(e) => setDraft({ ...draft, serverDir: e.target.value })}
+                  />
+                  <button
+                    className="btn subtle"
+                    type="button"
+                    onClick={async () => {
+                      const picked = await window.studio.pickFolder()
+                      if (picked) setDraft({ ...draft, serverDir: picked })
+                    }}
+                  >
+                    Browse…
+                  </button>
+                </span>
               </label>
               <div
                 style={{
@@ -329,22 +351,19 @@ export default function SettingsPage({
                       <span className="chip">Full access</span>
                     ) : canManageTeam ? (
                       <>
-                        <select
-                          className="input"
-                          style={{ width: 140, height: 32 }}
+                        <Select
+                          width={140}
+                          height={32}
                           value={m.role}
-                          onChange={(e) =>
+                          options={ROLE_OPTIONS}
+                          onChange={(v) =>
                             setTeam(
                               settings.team.map((x) =>
-                                x.id === m.id ? { ...x, role: e.target.value as TeamRole } : x
+                                x.id === m.id ? { ...x, role: v as TeamRole } : x
                               )
                             )
                           }
-                        >
-                          <option value="admin">Admin</option>
-                          <option value="operator">Operator</option>
-                          <option value="viewer">Viewer</option>
-                        </select>
+                        />
                         <button className="btn subtle small" onClick={() => removeMember(m.id)}>
                           Remove
                         </button>
@@ -376,16 +395,12 @@ export default function SettingsPage({
                       if (e.key === 'Enter') addMember()
                     }}
                   />
-                  <select
-                    className="input"
-                    style={{ width: 150 }}
+                  <Select
+                    width={150}
                     value={newMemberRole}
-                    onChange={(e) => setNewMemberRole(e.target.value as TeamRole)}
-                  >
-                    <option value="admin">Admin</option>
-                    <option value="operator">Operator</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
+                    options={ROLE_OPTIONS}
+                    onChange={(v) => setNewMemberRole(v as TeamRole)}
+                  />
                   <button className="btn accent" onClick={addMember} disabled={!newMemberName.trim()}>
                     Add member
                   </button>
@@ -461,6 +476,58 @@ export default function SettingsPage({
             </div>
           )}
 
+          {section === 'ai' && (
+            <div className="card">
+              <h3>AI Copilot</h3>
+              <p className="muted small" style={{ marginBottom: 16, lineHeight: 1.6 }}>
+                Connect Copilot to any OpenAI-compatible chat service — OpenAI, OpenRouter, a
+                self-hosted endpoint, or a local model server (LM Studio, Ollama). The model can
+                only propose PaperPilot tool calls; your tier, the allowlist and approvals still
+                gate every run, and everything lands in the audit log. The key is stored only in
+                this device’s settings file.
+              </p>
+              <label style={{ display: 'block' }}>
+                <span className="small muted">Base URL</span>
+                <input
+                  className="input"
+                  style={{ marginTop: 6 }}
+                  placeholder="https://api.openai.com/v1"
+                  value={draft.aiBaseUrl}
+                  onChange={(e) => setDraft({ ...draft, aiBaseUrl: e.target.value })}
+                />
+              </label>
+              <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', marginTop: 14 }}>
+                <label>
+                  <span className="small muted">API key (blank for local servers)</span>
+                  <input
+                    className="input"
+                    style={{ marginTop: 6 }}
+                    type="password"
+                    placeholder="sk-…"
+                    value={draft.aiApiKey}
+                    onChange={(e) => setDraft({ ...draft, aiApiKey: e.target.value })}
+                  />
+                </label>
+                <label>
+                  <span className="small muted">Model ID</span>
+                  <input
+                    className="input"
+                    style={{ marginTop: 6 }}
+                    placeholder="gpt-5 · claude-sonnet-4-6 · llama-3.3-70b"
+                    value={draft.aiModel}
+                    onChange={(e) => setDraft({ ...draft, aiModel: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 16, alignItems: 'center' }}>
+                <button className="btn accent" onClick={saveDraft}>
+                  Save
+                </button>
+                {savedNote && <span className="small muted">{savedNote}</span>}
+              </div>
+            </div>
+          )}
+
           {section === 'about' && (
             <div className="card">
               <h3>About</h3>
@@ -475,7 +542,7 @@ export default function SettingsPage({
               </div>
               {(
                 [
-                  ['Version', '2.0.0'],
+                  ['Version', '2.1.0'],
                   ['Tools', '13 · 3 permission tiers'],
                   ['Audit log', 'Always on'],
                   ['Design', 'Fluent v2 + Neo-Brutalism + Claude themes']

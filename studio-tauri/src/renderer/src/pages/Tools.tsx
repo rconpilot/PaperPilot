@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { StudioSettings, ToolInfo } from '../../../preload/index'
 import { ROLE_LABEL, ROLE_TIER, tierAllows } from '../lib'
-import { Modal, ResultBox } from '../components/ui'
+import { Modal, ResultBox, Select } from '../components/ui'
 import { motion } from 'motion/react'
 
 const TIER_ORDER = ['readonly', 'operator', 'admin'] as const
@@ -81,9 +81,9 @@ export default function Tools({ settings }: { settings: StudioSettings }): React
                   key={t.name}
                   className="card"
                   style={{ display: 'flex', flexDirection: 'column', opacity: locked ? 0.62 : 1 }}
-                  initial={{ opacity: 0, y: 14 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: locked ? 0.62 : 1, y: 0 }}
-                  transition={{ delay: i * 0.04, type: 'spring', stiffness: 320, damping: 28 }}
+                  transition={{ delay: Math.min(i * 0.015, 0.06), duration: 0.16, ease: 'easeOut' }}
                   whileHover={{ y: -3 }}
                 >
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{t.name}</div>
@@ -135,16 +135,17 @@ export default function Tools({ settings }: { settings: StudioSettings }): React
                   {a.required ? '' : ' (optional)'}
                 </span>
                 {a.kind === 'boolean' ? (
-                  <select
-                    className="input"
-                    style={{ marginTop: 6 }}
-                    value={values[a.name] ?? ''}
-                    onChange={(e) => setValues({ ...values, [a.name]: e.target.value })}
-                  >
-                    <option value="">— default —</option>
-                    <option value="true">true</option>
-                    <option value="false">false</option>
-                  </select>
+                  <div style={{ marginTop: 6 }}>
+                    <Select
+                      value={values[a.name] ?? ''}
+                      options={[
+                        { value: '', label: '— default —' },
+                        { value: 'true', label: 'true' },
+                        { value: 'false', label: 'false' }
+                      ]}
+                      onChange={(v) => setValues({ ...values, [a.name]: v })}
+                    />
+                  </div>
                 ) : (
                   <input
                     className="input"
