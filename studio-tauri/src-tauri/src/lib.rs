@@ -1,9 +1,11 @@
+mod ai;
 mod audit;
 mod rcon;
 mod service;
 mod settings;
 mod tools;
 
+use ai::{AiChatRequest, AiChatResponse};
 use audit::AuditEntry;
 use service::{BackupsResponse, CallResult, GithubInfo, ServerStatus, Service};
 use settings::StudioSettings;
@@ -58,6 +60,15 @@ async fn github(state: State<'_, AppState>) -> Result<GithubInfo, String> {
         .map_err(|e| e.to_string())
 }
 
+/// One AI Copilot round-trip. The model only PROPOSES tool calls here;
+/// execution always goes through call_tool with its tier/allowlist guards.
+#[tauri::command]
+async fn ai_chat(req: AiChatRequest) -> Result<AiChatResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || ai::ai_chat(&req))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn get_settings(state: State<'_, AppState>) -> StudioSettings {
     state.0.lock().unwrap().get_settings()
@@ -72,6 +83,7 @@ fn set_settings(state: State<'_, AppState>, next: StudioSettings) -> StudioSetti
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -85,6 +97,7 @@ pub fn run() {
             backups,
             audit,
             github,
+            ai_chat,
             get_settings,
             set_settings
         ])

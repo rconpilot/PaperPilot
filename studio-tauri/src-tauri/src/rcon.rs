@@ -19,6 +19,35 @@ struct Packet {
 /// Encode one RCON packet:
 /// [int32 LE size][int32 LE id][int32 LE type][body bytes][0x00][0x00]
 /// where size counts everything after the size field itself.
+/// Turn a raw io::Error into words a person can act on. The std Display
+/// leaks platform text like "(os error 10061)" into the UI, which reads as
+/// a crash instead of "the server is not there".
+pub(crate) fn friendly_io(e: &std::io::Error) -> String {
+    use std::io::ErrorKind::*;
+    match e.kind() {
+        ConnectionRefused => "connection refused — no server is listening at that address. Check that the server is running and that the host and port are right."
+            .to_string(),
+        TimedOut => "the connection timed out — the host did not answer. Check the address, and any firewall or VPN in between."
+            .to_string(),
+        ConnectionReset | ConnectionAborted => {
+            "the server closed the connection.".to_string()
+        }
+        BrokenPipe => "the connection broke while talking to the server.".to_string(),
+        PermissionDenied => "the connection was blocked (permission denied) — a firewall or antivirus may be stopping Studio."
+            .to_string(),
+        AddrNotAvailable => {
+            "that address is not reachable from this machine.".to_string()
+        }
+        _ => {
+            let msg = e.to_string();
+            match msg.rfind(" (os error") {
+                Some(i) => msg[..i].to_string(),
+                None => msg,
+            }
+        }
+    }
+}
+
 fn encode_packet(id: i32, pkt_type: i32, body: &str) -> Vec<u8> {
     let body_bytes = body.as_bytes();
     let size = 4 + 4 + body_bytes.len() as i32 + 2;
@@ -128,7 +157,7 @@ impl RconClient {
             .ok_or_else(|| "RCON socket is not connected.".to_string())?;
         stream
             .write_all(&encode_packet(id, pkt_type, body))
-            .map_err(|e| format!("RCON write failed: {e}"))
+            .map_err(|e| format!("RCON write failed: {}", friendly_io(&e)))
     }
 
     fn ensure_connected(&mut self) -> Result<(), String> {
@@ -141,23 +170,25 @@ impl RconClient {
     fn connect(&mut self) -> Result<(), String> {
         let addr = (self.host.as_str(), self.port)
             .to_socket_addrs()
-            .map_err(|e| {
+            .map_err(|_| {
                 format!(
-                    "RCON connection to {}:{} failed: {e}",
+                    "Could not reach {}:{} — could not resolve that host name. Check the address for typos.",
                     self.host, self.port
                 )
             })?
             .next()
             .ok_or_else(|| {
                 format!(
-                    "RCON connection to {}:{} failed: could not resolve host.",
+                    "Could not reach {}:{} — could not resolve that host name. Check the address for typos.",
                     self.host, self.port
                 )
             })?;
         let stream = TcpStream::connect_timeout(&addr, self.timeout).map_err(|e| {
             format!(
-                "RCON connection to {}:{} failed: {e}",
-                self.host, self.port
+                "Could not connect to {}:{} — {}",
+                self.host,
+                self.port,
+                friendly_io(&e)
             )
         })?;
         let _ = stream.set_nodelay(true);
@@ -228,7 +259,7 @@ impl RconClient {
                     .ok_or_else(|| "RCON socket is not connected.".to_string())?;
                 stream
                     .set_read_timeout(Some(remaining))
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| friendly_io(&e))?;
                 stream.read(&mut chunk)
             };
             match n {
@@ -238,7 +269,15 @@ impl RconClient {
                 }
                 Ok(n) => self.buffer.extend_from_slice(&chunk[..n]),
                 Err(e) => {
-                    return Err(format!("Timed out waiting for an RCON response ({e})."));
+                    if e.kind() == std::io::ErrorKind::WouldBlock
+                        || e.kind() == std::io::ErrorKind::TimedOut
+                    {
+                        return Err("Timed out waiting for an RCON response.".to_string());
+                    }
+                    return Err(format!(
+                        "Lost the RCON connection: {}",
+                        friendly_io(&e)
+                    ));
                 }
             }
         }

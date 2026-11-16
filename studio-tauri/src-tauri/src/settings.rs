@@ -34,6 +34,13 @@ pub struct StudioSettings {
     pub team: Vec<TeamMember>,
     /// Id of the team member currently using Studio (drives tool permissions).
     pub active_user_id: String,
+    /// AI Copilot: OpenAI-compatible chat endpoint (e.g. https://api.openai.com/v1).
+    /// Empty means Copilot is not configured yet and shows its setup screen.
+    pub ai_base_url: String,
+    /// AI Copilot API key — kept only in this local settings file.
+    pub ai_api_key: String,
+    /// AI Copilot model id (e.g. gpt-5, llama-3.3-70b, a local LM Studio model).
+    pub ai_model: String,
 }
 
 impl Default for StudioSettings {
@@ -65,6 +72,9 @@ impl Default for StudioSettings {
                 role: "owner".to_string(),
             }],
             active_user_id: "owner".to_string(),
+            ai_base_url: String::new(),
+            ai_api_key: String::new(),
+            ai_model: String::new(),
         }
     }
 }
