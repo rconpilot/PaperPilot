@@ -9,6 +9,7 @@ import Logs from './pages/Logs'
 import Audit from './pages/Audit'
 import Copilot from './pages/Copilot'
 import SettingsPage from './pages/SettingsPage'
+import logoUrl from './assets/logo.png'
 
 export type Page =
   | 'overview'
@@ -103,7 +104,7 @@ function App(): React.JSX.Element {
     <div className="app">
       <aside className="nav">
         <div className="app-row">
-          <div className="app-icon">P</div>
+          <img className="app-icon app-logo" src={logoUrl} alt="PaperPilot Studio logo" />
           <div className="app-name">PaperPilot Studio</div>
         </div>
         <div className="nav-search">Search tools, players…</div>
