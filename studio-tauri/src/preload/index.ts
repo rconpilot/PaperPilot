@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 
 export interface ToolInfo {
   name: string
@@ -49,6 +50,32 @@ export interface StudioSettings {
   density: 'comfortable' | 'compact'
   team: TeamMember[]
   activeUserId: string
+  /** AI Copilot: OpenAI-compatible endpoint root ('' = not configured). */
+  aiBaseUrl: string
+  /** AI Copilot API key (local settings only; may be empty for local models). */
+  aiApiKey: string
+  /** AI Copilot model id. */
+  aiModel: string
+}
+
+export interface AiToolCall {
+  id: string
+  name: string
+  /** Raw JSON argument string exactly as the model produced it. */
+  arguments: string
+}
+
+export interface AiChatRequest {
+  baseUrl: string
+  apiKey: string
+  model: string
+  messages: Record<string, unknown>[]
+  tools: Record<string, unknown>[]
+}
+
+export interface AiChatResponse {
+  content: string | null
+  toolCalls: AiToolCall[]
 }
 
 /**
@@ -84,6 +111,14 @@ const studio = {
     }[]
   > => invoke('audit', { limit }),
   github: (): Promise<{ stars: number | null; url: string }> => invoke('github'),
+  /** One AI Copilot round-trip. The model only proposes; tool execution
+   *  stays on callTool with all of its guards. */
+  aiChat: (req: AiChatRequest): Promise<AiChatResponse> => invoke('ai_chat', { req }),
+  /** Native folder picker for the server directory. Null when cancelled. */
+  pickFolder: async (): Promise<string | null> => {
+    const picked = await openDialog({ directory: true, multiple: false })
+    return typeof picked === 'string' ? picked : null
+  },
   openExternal: (url: string): void => {
     void openUrl(url)
   },
@@ -96,6 +131,7 @@ const studio = {
   maximize: (): void => {
     void getCurrentWindow().toggleMaximize()
   },
+  isMaximized: (): Promise<boolean> => getCurrentWindow().isMaximized(),
   close: (): void => {
     void getCurrentWindow().close()
   }
