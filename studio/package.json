@@ -1,10 +1,10 @@
 {
   "name": "paperpilot-studio",
-  "version": "1.21.0",
+  "version": "1.21.1",
   "description": "PaperPilot Studio \u2014 a native Windows-style GUI for the PaperPilot MCP server (Paper Minecraft server management via RCON). Hosts the real PaperPilot core in-process: 13 guarded tools, audit log, AI Copilot approvals, Fluent themes.",
   "main": "./out/main/index.js",
-  "author": "Abol \u2014 dlkhwshabwlfdl-web",
-  "homepage": "https://github.com/dlkhwshabwlfdl-web/PaperPilot",
+  "author": "Abol \u2014 rconpilot",
+  "homepage": "https://github.com/rconpilot/PaperPilot",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
