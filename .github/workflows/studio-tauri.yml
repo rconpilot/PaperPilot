@@ -57,7 +57,5 @@ jobs:
             studio-tauri/src-tauri/target/release/bundle/nsis/*.exe
             studio-tauri/src-tauri/target/release/bundle/msi/*.msi
           body: |
-            PaperPilot Studio, rebuilt on Tauri + Rust: the same UI, tools,
-            team roles and themes as the Electron edition at a fraction of
-            the download size (~10 MB instead of ~109 MB), with Motion
-            animations throughout.
+            PaperPilot Studio (Tauri edition) for Windows. Download the NSIS
+            .exe installer below (the .msi is for managed deployments).
