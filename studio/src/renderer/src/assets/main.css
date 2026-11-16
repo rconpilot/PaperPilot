@@ -138,6 +138,11 @@ textarea {
   align-items: center;
   justify-content: center;
 }
+.app-logo {
+  object-fit: cover;
+  background: #fff;
+  flex: none;
+}
 .app-name {
   font-size: 14px;
   font-weight: 600;
